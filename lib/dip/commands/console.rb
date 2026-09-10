@@ -5,14 +5,36 @@ require_relative "../command"
 module Dip
   module Commands
     module Console
+      # Figure out which shell dialect to generate integration code for.
+      #
+      # An explicit value (from `--shell`) always wins. Otherwise we guess from
+      # the `$SHELL` environment variable and fall back to the POSIX flavour
+      # (bash/zsh) which was the only supported one historically.
+      def self.detect_shell(explicit = nil)
+        name = (explicit || File.basename(ENV["SHELL"].to_s)).to_s.downcase
+        name.include?("fish") ? :fish : :posix
+      end
+
       class Start < Dip::Command
+        def initialize(shell: nil)
+          @shell = Console.detect_shell(shell)
+        end
+
         def execute
-          puts script
+          puts fish? ? fish_script : posix_script
         end
 
         private
 
-        def script
+        def fish?
+          @shell == :fish
+        end
+
+        def inject_command
+          "#{Dip.bin_path} console inject --shell #{@shell}"
+        end
+
+        def posix_script
           <<-SH.gsub(/^ {12}/, "")
             export DIP_SHELL=1
             export DIP_EARLY_ENVS=#{ENV.keys.join(",")}
@@ -24,7 +46,7 @@ module Dip
             }
 
             function dip_inject() {
-              eval "$(#{Dip.bin_path} console inject)"
+              eval "$(#{inject_command})"
             }
 
             function dip_reload() {
@@ -75,12 +97,42 @@ module Dip
             dip_reload
           SH
         end
+
+        def fish_script
+          <<-FISH.gsub(/^ {12}/, "")
+            set -gx DIP_SHELL 1
+            set -gx DIP_EARLY_ENVS "#{ENV.keys.join(",")}"
+            set -gx DIP_PROMPT_TEXT "ⅆ"
+
+            function dip_clear
+              # just stub, will be redefined after injecting aliases
+              true
+            end
+
+            function dip_inject
+              #{inject_command} | source
+            end
+
+            function dip_reload
+              dip_clear
+              dip_inject
+            end
+
+            # Renew aliases whenever the working directory changes.
+            function __dip_chpwd --on-variable PWD
+              dip_reload
+            end
+
+            dip_reload
+          FISH
+        end
       end
 
       class Inject < Dip::Command
         attr_reader :out, :aliases
 
-        def initialize
+        def initialize(shell: nil)
+          @shell = Console.detect_shell(shell)
           @aliases = []
           @out = []
         end
@@ -98,17 +150,30 @@ module Dip
 
         private
 
+        def fish?
+          @shell == :fish
+        end
+
         def add_aliases(*names)
           names.each do |name|
             aliases << name
-            out << "function #{name}() { #{Dip.bin_path} #{name} $@; }"
+            out << if fish?
+              "function #{name}; #{Dip.bin_path} #{name} $argv; end"
+            else
+              "function #{name}() { #{Dip.bin_path} #{name} $@; }"
+            end
           end
         end
 
         def clear_aliases
-          out << "function dip_clear() { \n" \
-                  "#{aliases.any? ? aliases.map { |a| "  unset -f #{a}" }.join("\n") : "true"} " \
-                  "\n}"
+          out << if fish?
+            body = aliases.any? ? "functions -e #{aliases.join(" ")}" : "true"
+            "function dip_clear; #{body}; end"
+          else
+            "function dip_clear() { \n" \
+              "#{aliases.any? ? aliases.map { |a| "  unset -f #{a}" }.join("\n") : "true"} " \
+              "\n}"
+          end
         end
       end
     end

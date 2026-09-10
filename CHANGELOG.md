@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+- Added Fish shell support for `dip console` shell integration: `dip console | source`
+- Added `--shell` (`-s`) option to `dip console` / `dip console inject` to force the shell dialect (`bash`, `zsh`, `fish`); autodetected from `$SHELL` by default
+- Fixed `dip.yml` schema validation crashing on the `json` gem 3.0+ (Ruby 3.5+): `unknown keyword: quirks_mode`
+
 ## [8.3.0] - 2026-05-23
 
 - Added `preflight` hook to run commands before `dip compose`, `dip run` and `dip ktl` [#188]
