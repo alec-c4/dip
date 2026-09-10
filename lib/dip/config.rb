@@ -3,6 +3,7 @@
 require "yaml"
 require "erb"
 require "pathname"
+require "json"
 require "json-schema"
 
 require "dip/version"
@@ -122,7 +123,9 @@ module Dip
       raise Dip::Error, "Schema file not found: #{schema_path}" unless File.exist?(schema_path)
 
       data = self.class.load_yaml(file_path)
-      schema = JSON::Validator.parse(File.read(schema_path))
+      # Parse with the stdlib rather than JSON::Validator.parse: the latter passes
+      # `quirks_mode:` to JSON.parse, which the json gem removed in 3.0 (Ruby 3.5+).
+      schema = JSON.parse(File.read(schema_path))
       JSON::Validator.validate!(schema, data)
     rescue Psych::SyntaxError => e
       raise Dip::Error, "Invalid YAML syntax in config file: #{e.message}"
@@ -130,7 +133,7 @@ module Dip
       data_display = data ? data.to_yaml.gsub("\n", "\n  ") : "nil"
       error_message = "Schema validation failed: #{e.message}\nInput data:\n  #{data_display}"
       raise Dip::Error, error_message
-    rescue JSON::Schema::JsonParseError => e
+    rescue JSON::Schema::JsonParseError, JSON::ParserError => e
       raise Dip::Error, "Error parsing schema file: #{e.message}"
     end
 
