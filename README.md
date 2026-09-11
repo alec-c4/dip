@@ -76,7 +76,7 @@ ktl *any-kubectl-arg
 provision
 ```
 
-When we change the current directory, all shell aliases are automatically removed. When we enter a directory that has a `dip.yml` file (in it or in a parent), the aliases are renewed. This is wired through the shell's directory-change hook — `chpwd_functions` on ZSH, a `cd`/`pushd`/`popd` wrapper on Bash, and a `--on-variable PWD` handler on Fish.
+When we change the current directory, all shell aliases are automatically removed. When we enter a directory that has a `dip.yml` file (in it or in a parent), the aliases are renewed. This is wired through the shell's directory-change hook — `chpwd_functions` on ZSH, a `cd`/`pushd`/`popd` wrapper on Bash, and a `--on-variable PWD` handler on Fish. The hook resolves the applicable `dip.yml` itself (no `dip` process involved) and only actually reloads when that path changes, so `cd`ing around inside the same project doesn't re-run `dip` on every prompt.
 
 Also, in shell mode Dip tries to determine manually passed environment variables. For example:
 
@@ -92,7 +92,7 @@ Once the startup snippet is in place, the integration is applied automatically e
 
 - `dip_inject` — evaluates `dip console inject`, which emits one shell function per interaction command plus the built-in `compose`/`up`/`stop`/`down`/`build`/`provision` wrappers.
 - `dip_clear` — removes the functions previously injected (regenerated on every inject so it always matches the current `dip.yml`).
-- `dip_reload` — runs `dip_clear` then `dip_inject`; also bound to the directory-change hook.
+- `dip_reload` — runs `dip_clear` then `dip_inject`; also bound to the directory-change hook, which calls it only when the resolved `dip.yml` path actually changed.
 
 The bootstrap also exports `DIP_SHELL=1`, `DIP_EARLY_ENVS` (the list of variables present at load time, used to detect manually passed env vars), and `DIP_PROMPT_TEXT` (`ⅆ`). On ZSH with the `agnoster` theme, `DIP_PROMPT_TEXT` is added as a prompt segment; other shells and themes are left untouched.
 
@@ -553,7 +553,7 @@ dip console inject [--shell bash|zsh|fish]   # just the command aliases
 
 - `--shell` (`-s`) selects the dialect: `bash`, `zsh`, or `fish`. When omitted, it is autodetected from `$SHELL`, falling back to POSIX (Bash/ZSH) output.
 - `dip console` is meant to be evaluated by your shell: `eval "$(dip console)"` for Bash/ZSH, `dip console | source` for Fish.
-- `dip console inject` is called internally by the bootstrap script (via `dip_reload`); you normally don't run it by hand.
+- `dip console inject` is called internally by the bootstrap script (via `dip_reload`); you normally don't run it by hand. It only needs the interaction command names, so it skips full `dip.yml` schema validation — run `dip validate` (or any other `dip` command) to check the file against the schema.
 
 ## Changelog
 

@@ -17,6 +17,8 @@ describe Dip::Commands::Console do
       it { expect { subject }.to output(/function dip_inject/).to_stdout }
       it { expect { subject }.to output(/function dip_reload/).to_stdout }
       it { expect { subject }.to output(%r{console inject --shell posix}).to_stdout }
+      it { expect { subject }.to output(/function __dip_auto_reload/).to_stdout }
+      it { expect { subject }.to output(/chpwd_functions\+=\(__dip_auto_reload\)/).to_stdout }
     end
 
     context "when the fish shell is requested" do
@@ -29,6 +31,8 @@ describe Dip::Commands::Console do
       it { expect { subject }.to output(/--on-variable PWD/).to_stdout }
       it { expect { subject }.to output(%r{console inject --shell fish \| source}).to_stdout }
       it { expect { subject }.not_to output(/export /).to_stdout }
+      it { expect { subject }.to output(/function __dip_config_path/).to_stdout }
+      it { expect { subject }.to output(/set -g __dip_config_path_cache/).to_stdout }
     end
 
     context "when the shell is autodetected from $SHELL" do
@@ -71,6 +75,15 @@ describe Dip::Commands::Console do
       it { expect { subject }.to output(/unset -f bash/).to_stdout }
       it { expect { subject }.to output(/function rails/).to_stdout }
       it { expect { subject }.to output(/unset -f rails/).to_stdout }
+    end
+
+    it "does not run full schema validation (runs on every automatic shell reload)" do
+      expect_any_instance_of(Dip::Config).not_to receive(:validate)
+      subject
+    end
+
+    it "does not leak DIP_SKIP_VALIDATION into the environment afterwards" do
+      expect { subject }.not_to change { ENV.key?("DIP_SKIP_VALIDATION") }.from(false)
     end
   end
 

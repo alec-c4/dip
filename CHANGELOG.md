@@ -5,6 +5,8 @@
 - Added Fish shell support for `dip console` shell integration: `dip console | source`
 - Added `--shell` (`-s`) option to `dip console` / `dip console inject` to force the shell dialect (`bash`, `zsh`, `fish`); autodetected from `$SHELL` by default
 - Fixed `dip.yml` schema validation crashing on the `json` gem 3.0+ (Ruby 3.5+): `unknown keyword: quirks_mode`
+- Fixed shell integration (`dip console`) re-running `dip` on every `cd`, even within the same project — it now only reloads aliases when the resolved `dip.yml` actually changes
+- Fixed `dip console inject` paying for full `dip.yml` schema validation on every shell reload; it now only reads the interaction command names
 
 ## [8.3.0] - 2026-05-23
 

@@ -4,7 +4,6 @@ require "yaml"
 require "erb"
 require "pathname"
 require "json"
-require "json-schema"
 
 require "dip/version"
 require "dip/ext/hash"
@@ -115,14 +114,19 @@ module Dip
       end
     end
 
-    def validate
+    # `data`, when given, is the already-parsed raw config (as produced by
+    # `load_yaml`) so callers that parsed the file themselves don't pay for
+    # parsing it a second time here.
+    def validate(data = nil)
       raise Dip::Error, "Config file path is not set" if file_path.nil?
       raise Dip::Error, "Config file not found: #{file_path}" unless File.exist?(file_path)
 
       schema_path = File.join(File.dirname(__FILE__), "../../schema.json")
       raise Dip::Error, "Schema file not found: #{schema_path}" unless File.exist?(schema_path)
 
-      data = self.class.load_yaml(file_path)
+      require "json-schema"
+
+      data ||= self.class.load_yaml(file_path)
       # Parse with the stdlib rather than JSON::Validator.parse: the latter passes
       # `quirks_mode:` to JSON.parse, which the json gem removed in 3.0 (Ruby 3.5+).
       schema = JSON.parse(File.read(schema_path))
@@ -182,7 +186,7 @@ module Dip
       @config = CONFIG_DEFAULTS.merge(base_config)
 
       unless ENV.key?("DIP_SKIP_VALIDATION")
-        validate
+        validate(config)
       end
 
       @config

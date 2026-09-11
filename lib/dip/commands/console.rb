@@ -54,6 +54,36 @@ module Dip
               dip_inject
             }
 
+            # Resolves the dip.yml that applies to $PWD (or $DIP_FILE), without
+            # spawning a `dip` process — used to skip redundant reloads below.
+            function __dip_config_path() {
+              if [ -n "${DIP_FILE:-}" ]; then
+                printf '%s\\n' "$DIP_FILE"
+                return
+              fi
+
+              \\typeset __dip_dir="$PWD"
+              while :; do
+                if [ -e "$__dip_dir/dip.yml" ]; then
+                  printf '%s\\n' "$__dip_dir/dip.yml"
+                  return
+                fi
+                [ "$__dip_dir" = "/" ] && return
+                __dip_dir=$(dirname "$__dip_dir")
+              done
+            }
+
+            # Only reload aliases on `cd` when the resolved dip.yml actually
+            # changed — most `cd`s stay within the same project and would
+            # otherwise re-spawn `dip` (Ruby boot + schema validation) for nothing.
+            function __dip_auto_reload() {
+              \\typeset __dip_new_config_path
+              __dip_new_config_path="$(__dip_config_path)"
+              [ "$__dip_new_config_path" = "${__DIP_CONFIG_PATH:-}" ] && return
+              __DIP_CONFIG_PATH="$__dip_new_config_path"
+              dip_reload
+            }
+
             # Inspired by RVM
             function __zsh_like_cd() {
               \\typeset __zsh_like_cd_hook
@@ -80,7 +110,7 @@ module Dip
             }
 
             export -a chpwd_functions
-            [[ " ${chpwd_functions[*]} " == *" dip_reload "* ]] || chpwd_functions+=(dip_reload)
+            [[ " ${chpwd_functions[*]} " == *" __dip_auto_reload "* ]] || chpwd_functions+=(__dip_auto_reload)
 
             if [[ "$ZSH_THEME" = "agnoster" ]]; then
               eval "`declare -f prompt_end | sed '1s/.*/_&/'`"
@@ -95,6 +125,7 @@ module Dip
             fi
 
             dip_reload
+            __DIP_CONFIG_PATH="$(__dip_config_path)"
           SH
         end
 
@@ -118,12 +149,41 @@ module Dip
               dip_inject
             end
 
-            # Renew aliases whenever the working directory changes.
+            # Resolves the dip.yml that applies to $PWD (or $DIP_FILE), without
+            # spawning a `dip` process — used to skip redundant reloads below.
+            function __dip_config_path
+              if set -q DIP_FILE
+                echo "$DIP_FILE"
+                return
+              end
+
+              set -l __dip_dir "$PWD"
+              while true
+                if test -e "$__dip_dir/dip.yml"
+                  echo "$__dip_dir/dip.yml"
+                  return
+                end
+                if test "$__dip_dir" = "/"
+                  return
+                end
+                set __dip_dir (dirname "$__dip_dir")
+              end
+            end
+
+            # Renew aliases whenever the working directory changes — but only
+            # when the resolved dip.yml actually changed. Most `cd`s stay within
+            # the same project and would otherwise re-spawn `dip` (Ruby boot +
+            # schema validation) for nothing.
             function __dip_chpwd --on-variable PWD
-              dip_reload
+              set -l __dip_new_config_path (__dip_config_path)
+              if test "$__dip_new_config_path" != "$__dip_config_path_cache"
+                set -g __dip_config_path_cache "$__dip_new_config_path"
+                dip_reload
+              end
             end
 
             dip_reload
+            set -g __dip_config_path_cache (__dip_config_path)
           FISH
         end
       end
@@ -138,9 +198,14 @@ module Dip
         end
 
         def execute
-          if Dip.config.exist?
-            add_aliases(*Dip.config.interaction.keys) if Dip.config.interaction
-            add_aliases("compose", "up", "stop", "down", "provision", "build")
+          # Runs on every automatic shell reload (e.g. on `cd`), so it only needs
+          # the interaction command names, not full schema conformance — skip the
+          # `json-schema` require and validation pass that every other command pays.
+          with_validation_skipped do
+            if Dip.config.exist?
+              add_aliases(*Dip.config.interaction.keys) if Dip.config.interaction
+              add_aliases("compose", "up", "stop", "down", "provision", "build")
+            end
           end
 
           clear_aliases
@@ -149,6 +214,19 @@ module Dip
         end
 
         private
+
+        def with_validation_skipped
+          had_key = ENV.key?("DIP_SKIP_VALIDATION")
+          previous = ENV["DIP_SKIP_VALIDATION"]
+          ENV["DIP_SKIP_VALIDATION"] = "1"
+          yield
+        ensure
+          if had_key
+            ENV["DIP_SKIP_VALIDATION"] = previous
+          else
+            ENV.delete("DIP_SKIP_VALIDATION")
+          end
+        end
 
         def fish?
           @shell == :fish
