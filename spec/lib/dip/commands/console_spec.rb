@@ -77,6 +77,26 @@ describe Dip::Commands::Console do
       it { expect { subject }.to output(/unset -f rails/).to_stdout }
     end
 
+    context "when an interaction command shadows a shell builtin", :config do
+      let(:config) { {interaction: {jobs: {service: "app", command: "bin/jobs start"}}} }
+
+      it "does not alias it" do
+        expect { subject }.not_to output(/function jobs/).to_stdout
+      end
+
+      it "does not try to unset it either" do
+        expect { subject }.not_to output(/unset -f jobs|functions -e .*jobs/).to_stdout
+      end
+
+      it "warns on stderr instead" do
+        expect { subject }.to output(/skipping alias `jobs`/).to_stderr
+      end
+
+      it "still aliases commands that don't collide" do
+        expect { subject }.to output(/function compose/).to_stdout
+      end
+    end
+
     it "does not run full schema validation (runs on every automatic shell reload)" do
       expect_any_instance_of(Dip::Config).not_to receive(:validate)
       subject

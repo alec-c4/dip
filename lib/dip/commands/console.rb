@@ -5,6 +5,20 @@ require_relative "../command"
 module Dip
   module Commands
     module Console
+      # Interaction command names come straight from `dip.yml`, and `inject`
+      # turns each one into a same-named shell function. A name that collides
+      # with a shell builtin/keyword silently shadows it for the rest of the
+      # session — e.g. an interaction called `jobs` breaks `jobs`, which
+      # things like Starship's prompt call on every render, turning every
+      # keystroke into a `dip jobs` invocation. Skip those instead of
+      # aliasing over them.
+      RESERVED_NAMES = %w[
+        cd pwd test read set jobs type command builtin history alias unalias
+        source eval exec exit return break continue trap kill wait bg fg
+        export unset declare typeset readonly local shift times true false
+        echo printf time status functions function end
+      ].freeze
+
       # Figure out which shell dialect to generate integration code for.
       #
       # An explicit value (from `--shell`) always wins. Otherwise we guess from
@@ -234,6 +248,12 @@ module Dip
 
         def add_aliases(*names)
           names.each do |name|
+            if Console::RESERVED_NAMES.include?(name.to_s)
+              warn "dip: skipping alias `#{name}` — it would shadow the `#{name}` shell builtin. " \
+                "Run it as `#{Dip.bin_path} #{name}`, or rename it in dip.yml."
+              next
+            end
+
             aliases << name
             out << if fish?
               "function #{name}; #{Dip.bin_path} #{name} $argv; end"

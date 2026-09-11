@@ -90,7 +90,7 @@ Once the startup snippet is in place, the integration is applied automatically e
 
 `dip console` prints a bootstrap script that defines three helpers:
 
-- `dip_inject` — evaluates `dip console inject`, which emits one shell function per interaction command plus the built-in `compose`/`up`/`stop`/`down`/`build`/`provision` wrappers.
+- `dip_inject` — evaluates `dip console inject`, which emits one shell function per interaction command plus the built-in `compose`/`up`/`stop`/`down`/`build`/`provision` wrappers. An interaction command whose name collides with a shell builtin/keyword (`jobs`, `test`, `read`, `set`, …) is skipped, with a warning on stderr — run it as `dip <name>` instead, or rename it.
 - `dip_clear` — removes the functions previously injected (regenerated on every inject so it always matches the current `dip.yml`).
 - `dip_reload` — runs `dip_clear` then `dip_inject`; also bound to the directory-change hook, which calls it only when the resolved `dip.yml` path actually changed.
 
